@@ -1,54 +1,43 @@
-#!/bin/bash
-# Bash script to set up web servers for web_static deployment
+#!/usr/bin/env bash
+# Sets up a web server for deployment of web_static.
 
-# Install Nginx if it's not already installed
-if ! dpkg -l | grep -q nginx; then
-    sudo apt-get -y update
-    sudo apt-get -y install nginx
-fi
+sudo apt-get update
+sudo apt-get install -y nginx
 
-# Create necessary directories if they don't exist
-web_static="/data/web_static"
-web_static_test="$web_static/releases/test"
+sudo mkdir -p /data/web_static/releases/test/
+sudo mkdir -p /data/web_static/shared/
+echo "
+<html>
+<head>
+</head>
+<body>
+Holberton School
+</body>
+</html>" | sudo tee /data/web_static/releases/test/index.html > /dev/null
 
-sudo mkdir -p $web_static_test
-sudo mkdir -p $web_static/shared
+ln -sf /data/web_static/releases/test/ /data/web_static/current
 
-# Create a fake HTML file for testing
-echo "This is a test." | sudo tee "$web_static_test/index.html"
+ chown -R ubuntu /data/
+ chgrp -R ubuntu /data/
 
-# Create a symbolic link, deleting it first if it already exists
-if [ -L "$web_static/current" ]; then
-    sudo rm -f "$web_static/current"
-fi
-
-sudo ln -sf "$web_static_test" "$web_static/current"
-
-# Give ownership of /data/ to the ubuntu user and group recursively
-sudo chown -R ubuntu:ubuntu $web_static
-
-# Update Nginx configuration
-nginx_config="/etc/nginx/sites-available/default"
-
-# Replace the default Nginx configuration with a custom configuration
-cat <<EOF | sudo tee $nginx_config
-server {
+printf %s "server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name _;
-
-    location /hbnb_static/ {
-        alias $web_static/current/;
-        index index.html;
+    add_header X-Served-By $HOSTNAME;
+    root   /var/www/html;
+    index  index.html index.htm;
+    location /hbnb_static {
+        alias /data/web_static/current;
+        index index.html index.htm;
     }
-
-    location / {
-        try_files $uri $uri/ =404;
+    location /redirect_me {
+        return 301 http://cuberule.com/;
     }
-}
-EOF
+    error_page 404 /404.html;
+    location /404 {
+      root /var/www/html;
+      internal;
+    }
+}" > /etc/nginx/sites-available/default
 
-# Restart Nginx to apply the new configuration
-sudo service nginx restart
-
-echo "Web server setup complete."
+service nginx restart
